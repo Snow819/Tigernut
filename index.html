@@ -156,6 +156,14 @@
             display: inline-block;
         }
         
+        .url-config {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+        
         /* Product Display Page Styles */
         .product-display {
             display: none;
@@ -270,7 +278,16 @@
         
         <div class="info-box">
             <h3>🇳🇬 Nigerian Product QR System</h3>
-            <p>Generate QR codes that link to beautiful product display pages. When scanned, customers will see a professional product information page with all details formatted nicely.</p>
+            <p>Generate QR codes that link to beautiful product display pages. When scanned, customers will be redirected to your custom product page with all details formatted nicely.</p>
+        </div>
+        
+        <div class="url-config">
+            <h4>🔗 Website Configuration</h4>
+            <div class="form-group">
+                <label for="baseUrl">Your Website URL:</label>
+                <input type="url" id="baseUrl" placeholder="https://tigernut-sansaliuabdulbasits-projects.vercel.app/" value="">
+                <small style="color: #666; font-size: 0.9em;">Enter your website URL where this QR generator is hosted. Leave empty to use current page URL.</small>
+            </div>
         </div>
         
         <div class="form-group">
@@ -342,10 +359,9 @@
             </div>
             
             <div class="qr-info">
-                <strong>QR Code Content:</strong><br>
+                <strong>QR Code URL:</strong><br>
                 <div class="url-display" id="urlDisplay"></div>
-                <p><em>This QR code contains readable product information that will display in any QR scanner app.</em></p>
-                <p style="font-size: 0.9em; color: #666;"><strong>Note:</strong> The QR code now contains simple text that any scanner can read. For the full interactive experience, use the "Preview Product Page" button.</p>
+                <p><em>This QR code contains a URL that will open your custom product page when scanned.</em></p>
             </div>
         </div>
     </div>
@@ -416,6 +432,7 @@
     <script>
         let currentQRCode = null;
         let currentProductData = null;
+        let generatedUrl = null;
         
         // Set default dates
         window.onload = function() {
@@ -425,6 +442,9 @@
             
             document.getElementById('productionDate').value = today.toISOString().split('T')[0];
             document.getElementById('expirationDate').value = futureDate.toISOString().split('T')[0];
+            
+            // Set default base URL to current page
+            document.getElementById('baseUrl').value = window.location.origin + window.location.pathname;
             
             // Check if URL has product data for display
             checkForProductData();
@@ -445,27 +465,7 @@
                 }
             }
             
-            // Check if this is a product page request (fallback)
-            const path = window.location.pathname;
-            const hash = window.location.hash;
-            if (path.includes('product') || hash.includes('product')) {
-                showProductNotFound();
-                return true;
-            }
-            
             return false;
-        }
-        
-        function showProductNotFound() {
-            document.getElementById('generatorContainer').style.display = 'none';
-            document.getElementById('productDisplay').style.display = 'block';
-            document.getElementById('productDisplay').innerHTML = `
-                <div style="text-align: center; padding: 50px;">
-                    <h2 style="color: #e74c3c;">Product Not Found</h2>
-                    <p>The product information could not be loaded.</p>
-                    <button class="back-btn" onclick="showGenerator()">← Back to Generator</button>
-                </div>
-            `;
         }
         
         function generateQRCode() {
@@ -478,6 +478,7 @@
             const batchNumber = document.getElementById('batchNumber').value;
             const category = document.getElementById('category').value;
             const description = document.getElementById('description').value;
+            const baseUrl = document.getElementById('baseUrl').value || window.location.origin + window.location.pathname;
             
             if (!productName || !productPrice || !productCode || !productionDate || !expirationDate) {
                 alert('Please fill in all required fields (Product Name, Price, Code, Production Date, Expiration Date)');
@@ -508,17 +509,18 @@
             
             currentProductData = productData;
             
-            // Create a shorter, more compatible QR code content
-            const qrContent = createCompatibleQRContent(productData);
+            // Create URL with encoded product data
+            const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(productData))));
+            generatedUrl = `${baseUrl}?data=${encodedData}`;
             
             try {
                 // Clear previous QR code
                 const qrContainer = document.getElementById('qrcode');
                 qrContainer.innerHTML = '';
                 
-                // Create QR code with shorter content
-                const qr = qrcode(0, 'M'); // Medium error correction for better compatibility
-                qr.addData(qrContent);
+                // Create QR code with URL
+                const qr = qrcode(0, 'M'); // Medium error correction
+                qr.addData(generatedUrl);
                 qr.make();
                 
                 // Create canvas element
@@ -550,12 +552,8 @@
                 // Display product information
                 displayProductInfo(productData);
                 
-                // Show QR content
-                document.getElementById('urlDisplay').innerHTML = `
-                    <div style="font-size: 0.8em; line-height: 1.4;">
-                        ${qrContent.replace(/\n/g, '<br>')}
-                    </div>
-                `;
+                // Show QR URL
+                document.getElementById('urlDisplay').innerHTML = `<a href="${generatedUrl}" target="_blank" style="color: #2E8B57; text-decoration: none;">${generatedUrl}</a>`;
                 
                 document.getElementById('qrContainer').style.display = 'block';
                 
@@ -563,32 +561,6 @@
                 console.error('QR Code generation error:', error);
                 alert('Error generating QR code. Please try again.');
             }
-        }
-        
-        function createCompatibleQRContent(data) {
-            // Create a simple, readable text format that any QR scanner can handle
-            const expiryDate = new Date(data.dates.expiration);
-            const today = new Date();
-            const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
-            
-            let qrText = `🛍️ ${data.name}\n`;
-            qrText += `💰 ₦${data.price.amount.toFixed(2)}\n`;
-            qrText += `🏭 ${data.manufacturer}\n`;
-            qrText += `📦 Code: ${data.code}\n`;
-            qrText += `📅 Expires: ${formatDate(data.dates.expiration)}\n`;
-            qrText += `⏰ Days left: ${daysUntilExpiry}\n`;
-            
-            if (data.batchNumber) {
-                qrText += `🔢 Batch: ${data.batchNumber}\n`;
-            }
-            
-            if (data.description) {
-                qrText += `📝 ${data.description.substring(0, 100)}${data.description.length > 100 ? '...' : ''}\n`;
-            }
-            
-            qrText += `\n🇳🇬 Nigerian Product QR System`;
-            
-            return qrText;
         }
         
         function displayProductInfo(data) {
